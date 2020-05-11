@@ -1,0 +1,111 @@
+---
+title: "Untitled"
+author: "David Henderson"
+date: "11/05/2020"
+output: 
+  html_document:
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(curl)
+library(sf)
+library(rmapshaper)
+```
+
+
+## IMD data
+
+Read in straight from source and rename `area_code` to `dz` for joining
+
+```{r, message=FALSE, warning=FALSE}
+imd <- read_tsv("https://data.bris.ac.uk/datasets/1ef3q32gybk001v77c1ifmty7x/uk_imd_scores_data.txt") %>% 
+  rename(dz = area_code)
+imd
+```
+
+## Shapefile
+
+Zip file this time so needs to be read in to a `tempfile()` and then unzipped into another.
+
+Also rename `dz` 
+
+```{r}
+temp_1 <- tempfile()
+temp_2 <- tempfile()
+source <- "http://sedsh127.sedsh.gov.uk/Atom_data/ScotGov/ZippedShapefiles/SG_DataZoneBdry_2001.zip"
+
+temp_1 <- curl_download(url = source, destfile = temp_1, quiet = FALSE)
+unzip(temp_1, exdir = temp_2)
+
+dz_shp <- read_sf(file.path(temp_2,"SG_DataZone_Bdry_2001.shp"))
+
+dz_shp <- ms_simplify(dz_shp) %>% 
+  select(-DZ_NAME, -DZ_GAELIC, -STDAREA_HA, -Shape_Leng, -Shape_Area) %>% 
+  rename(dz = DZ_CODE)
+dz_shp
+```
+
+
+## DZ lookup
+
+Using the PHS opendata. 
+
+```{r, warning=FALSE, message=FALSE}
+lookup <- read_csv("https://www.opendata.nhs.scot/dataset/9f942fdb-e59e-44f5-b534-d6e17229cc7b/resource/e92d19d4-ced7-40c8-b628-e28e4528fc41/download/dz2001_codes_and_labels_21042020.csv") %>% 
+  select(DataZone, CA, CAName, HB, HBName) %>% 
+  rename(dz = DataZone)
+lookup
+```
+
+
+## Join
+
+Join and then coerce to `sf` object
+
+```{r}
+join <- left_join(lookup, imd) %>% 
+  left_join(dz_shp) %>% 
+  st_as_sf(.)
+join
+```
+
+
+## Plot
+
+Filter for Aberdeenshire then plot....
+
+```{r, fig.width=9, fig.height=6}
+theme_set(theme_minimal())
+
+join %>% 
+  filter(CAName == "Aberdeenshire") %>% 
+  ggplot() +                                      
+  geom_sf(aes(fill = uk_imd_england_quintile),    
+          alpha = 0.9,                          
+          colour = 'black',                                                      
+          size = 0.05) +                                                           
+  scale_fill_brewer(palette = "YlOrRd",                                           
+                    name = "UK IMD Quintiles") +    
+  labs(x = NULL, y = NULL,                                                          
+       title = "Deprivation Quintiles for Aberdeenshire by Data Zone (2001)",              
+       subtitle = "Sources: Abel et al (2016) BMJ and Office for National Statistics under Open
+       Government License v3.0",                                                   
+       caption = "Plot by @WillBall12 made by code adapted from @traffordDataLab.
+       Contains OS data © Crown copyright and database right (2020)") +  
+  theme(axis.line=element_blank(), 
+        axis.ticks=element_blank(), 
+        axis.text=element_blank(),
+        axis.title=element_blank(),
+        panel.grid = element_blank()) 
+```
+
+
+P.S. Don't think you need to credit Trafford Lab there. Pretty standard ggplot code now and they just showed how to use it. 
+
