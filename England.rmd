@@ -1,0 +1,103 @@
+---
+title: "England and Wales UK IMD LSOA Maps"
+author: "Will Ball"
+date: "16/05/2020"
+output: 
+  html_document:
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(curl)
+library(sf)
+library(rmapshaper)
+library(viridis)
+```
+
+
+## IMD data
+
+Read in straight from source. 'Datazone/LSOA = 'area_code'
+
+```{r, message=FALSE, warning=FALSE}
+imd <- read_tsv("https://data.bris.ac.uk/datasets/1ef3q32gybk001v77c1ifmty7x/uk_imd_scores_data.txt")
+imd
+```
+
+## Shapefile
+
+Read in shapefile for England and Wales and change LSOA Code to 'area_code' for join
+
+```{r}
+sf_LSOA <- st_read(
+  "https://raw.githubusercontent.com/gausie/LSOA-2011-GeoJSON/master/lsoa.geojson",
+                 quiet = TRUE) %>%
+  rename(area_code = LSOA11CD)
+
+glimpse(sf_LSOA)
+
+st_geometry(sf_LSOA)
+```
+
+
+## LSOA lookup
+
+Read in lookup for LSOA to Local Authority, rename LSOA code to 'area_code' for join
+
+```{r, warning=FALSE, message=FALSE}
+lookup <- read_csv("https://opendata.arcgis.com/datasets/8c05b84af48f4d25a2be35f1d984b883_0.csv") %>% 
+  select(LSOA11CD, LAD18CD, LAD18NM) %>% 
+  rename(area_code = LSOA11CD)
+lookup
+```
+
+
+## Join
+
+Join and then coerce to `sf` object
+
+```{r}
+join <- left_join(lookup, imd) %>% 
+  left_join(sf_LSOA) %>% 
+  st_as_sf(.)
+join
+```
+
+
+## Plot
+
+Changes as required:
+filter - by LAD18NM/ctry
+title - to specify area selected
+ggsave - file name
+
+```{r, fig.width=9, fig.height=6}
+theme_set(theme_minimal())
+join %>% 
+  filter(LAD18NM == "Ipswich") %>% 
+  ggplot() +                                      
+  geom_sf(aes(fill = uk_imd_england_quintile),
+          color = NA)+
+  scale_fill_viridis(option = "plasma", discrete = T) +
+  scale_color_viridis() +
+  labs(x = NULL, y = NULL,                                                          
+       title = "UK IMD Quintiles for LSOA (2011) in Ipswich",              
+       subtitle = "Sources: Abel et al (2016) BMJ Open and Office for National Statistics under 
+       Open Government License v3.0",                                                   
+       caption = "Plot by @WillBall12 | Contains OS data © Crown copyright and database right (2020)") +  
+  theme(axis.line=element_blank(), 
+        axis.ticks=element_blank(), 
+        axis.text=element_blank(),
+        axis.title=element_blank(),
+        panel.grid = element_blank(),
+        plot.caption.position = 'plot',
+        legend.title = element_blank()) 
+
+ggsave("Ipswich.png")
+```
