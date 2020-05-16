@@ -1,4 +1,7 @@
 # UKIMD-Maps
-Code and selection of plots of UK IMD Quintiles for given areas.
+Code and selection of plots of UK IMD Quintiles for given areas in Scotland, England and Wales.
 
-Plots made from code originally developed by @traffordDataLab here: https://medium.com/@traffordDataLab/lets-make-a-map-in-r-7bd1d9366098
+The markdown files for Scotland and England are based on code kindly developed by @davidhen
+
+
+
