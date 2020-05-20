@@ -111,7 +111,7 @@ lookupScot
 
 # 3. Join
 
-lookupGB <- left_join(lookupEngWal, lookupScot)
+lookupGB <- full_join(lookupScot, lookupEngWal, by = 'area_code')
 
 ```
 
@@ -140,14 +140,14 @@ ggsave - file name
 ```{r, fig.width=9, fig.height=6}
 theme_set(theme_minimal())
  join %>% 
-#  filter(CAName == "Highland") %>% 
+  filter(CAName == "Highland") %>% 
   ggplot() +                                      
   geom_sf(aes(fill = uk_imd_england_quintile),
           color = NA)+
   scale_fill_viridis(option = "plasma", discrete = T) +
   scale_color_viridis() +
   labs(x = NULL, y = NULL,                                                          
-       title = "Deprivation Quintiles for England & Wales (LSOA) and Scotland (Datazone)",
+       title = "Deprivation Quintiles for Highland Council by Data Zone",
        subtitle = "Sources: Abel et al (2016) BMJ Open and Office for National Statistics under 
        Open Government License v3.0",                                                   
        caption = "Plot by @WillBall12 | Contains OS data © Crown copyright and database right (2020)") +  
@@ -160,5 +160,5 @@ theme_set(theme_minimal())
         plot.title.position = 'plot',
         legend.title = element_blank()) 
 
-ggsave("Plots/Britain.png")
+ggsave("Plots/Highland.png")
 ```
