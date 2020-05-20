@@ -1,0 +1,164 @@
+---
+title: "Eng/Wal/Scot UK IMD Mapping"
+author: "Will Ball"
+date: "16/05/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load in Packages
+
+```{r, warning=FALSE, message=FALSE}
+library(tidyverse)
+library(curl)
+library(sf)
+library(rmapshaper)
+library(viridis)
+
+```
+
+## IMD data
+
+Read in straight from source. 'Datazone/LSOA = 'area_code'
+
+```{r, message=FALSE, warning=FALSE}
+imd <- read_tsv("https://data.bris.ac.uk/datasets/1ef3q32gybk001v77c1ifmty7x/uk_imd_scores_data.txt")
+imd
+
+```
+
+## Shapefiles
+
+1. England and Wales
+2. Scotland
+3. Join
+
+Rename to area_code for join
+
+```{r}
+# 1. Eng/Wal
+
+sf_EngWal <- st_read(
+  "https://raw.githubusercontent.com/gausie/LSOA-2011-GeoJSON/master/lsoa.geojson",
+                 quiet = TRUE) %>%
+  select(-LSOA11NM, -LSOA11NMW) %>%
+  rename(area_code = LSOA11CD)
+
+sf_EngWal <- st_as_sf(sf_EngWal)
+sf_EngWal
+
+# 2. Scot
+  
+temp_1 <- tempfile()
+temp_2 <- tempfile()
+source <- "http://sedsh127.sedsh.gov.uk/Atom_data/ScotGov/ZippedShapefiles/SG_DataZoneBdry_2001.zip"
+temp_1 <- curl_download(url = source, destfile = temp_1, quiet = FALSE)
+unzip(temp_1, exdir = temp_2)
+sf_Scot <- read_sf(file.path(temp_2,"SG_DataZone_Bdry_2001.shp"))
+sf_Scot <- ms_simplify(sf_Scot) %>% 
+  select(-DZ_NAME, -DZ_GAELIC, -STDAREA_HA, -Shape_Leng, -Shape_Area) %>% 
+  rename(area_code = DZ_CODE)
+sf_Scot
+
+
+```
+
+## Assign CRS & Join
+
+1. EngWal
+2. Scot
+3. rbind to GB
+
+```{r, warning=FALSE, message=FALSE}
+
+# 1. EngWal
+
+sf_temp <- st_transform(sf_EngWal, crs = "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +datum=OSGB36 +units=m +no_defs")
+
+# 2. Scot
+
+sf_temp1 <- st_transform(sf_Scot, crs = "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +datum=OSGB36 +units=m +no_defs")
+
+# 3. Join
+
+sf_GB <- rbind(sf_temp, sf_temp1)
+
+```
+
+## Lookups
+
+1. LSOA
+2. DZ
+3. Join
+
+```{r, warning=FALSE, message=FALSE}
+# 1. LSOA
+
+lookupEngWal <- read_csv("https://opendata.arcgis.com/datasets/8c05b84af48f4d25a2be35f1d984b883_0.csv") %>% 
+  select(LSOA11CD, LAD18CD, LAD18NM) %>% 
+  rename(area_code = LSOA11CD)
+lookupEngWal
+
+# 2. DZ
+
+lookupScot <- read_csv("https://www.opendata.nhs.scot/dataset/9f942fdb-e59e-44f5-b534-d6e17229cc7b/resource/e92d19d4-ced7-40c8-b628-e28e4528fc41/download/dz2001_codes_and_labels_21042020.csv") %>% 
+  select(DataZone, CA, CAName, HB, HBName) %>% 
+  rename(area_code = DataZone)
+lookupScot
+
+# 3. Join
+
+lookupGB <- left_join(lookupEngWal, lookupScot)
+
+```
+
+## Join
+
+Join and then coerce to `sf` object
+
+```{r}
+imd$area_code <- as.character(imd$area_code)
+lookupGB$area_code <- as.character(lookupGB$area_code)
+sf_GB$area_code <- as.character(sf_GB$area_code)
+
+join <- left_join(sf_GB, lookupGB, by = 'area_code') %>% 
+  left_join(imd, by = 'area_code') %>% 
+  st_as_sf(.)
+join
+```
+
+## Plot
+
+Changes as required:
+filter - by CAName/ctry/HBName/LAD18NM
+title - to specify area selected
+ggsave - file name
+
+```{r, fig.width=9, fig.height=6}
+theme_set(theme_minimal())
+ join %>% 
+#  filter(CAName == "Highland") %>% 
+  ggplot() +                                      
+  geom_sf(aes(fill = uk_imd_england_quintile),
+          color = NA)+
+  scale_fill_viridis(option = "plasma", discrete = T) +
+  scale_color_viridis() +
+  labs(x = NULL, y = NULL,                                                          
+       title = "Deprivation Quintiles for England & Wales (LSOA) and Scotland (Datazone)",
+       subtitle = "Sources: Abel et al (2016) BMJ Open and Office for National Statistics under 
+       Open Government License v3.0",                                                   
+       caption = "Plot by @WillBall12 | Contains OS data © Crown copyright and database right (2020)") +  
+  theme(axis.line=element_blank(), 
+        axis.ticks=element_blank(), 
+        axis.text=element_blank(),
+        axis.title=element_blank(),
+        panel.grid = element_blank(),
+        plot.caption.position = 'plot',
+        plot.title.position = 'plot',
+        legend.title = element_blank()) 
+
+ggsave("Plots/Britain.png")
+```
